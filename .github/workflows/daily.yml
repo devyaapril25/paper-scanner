@@ -1,0 +1,42 @@
+name: Daily data and site
+on:
+  schedule:
+    - cron: '45 10 * * 1-5'   # 16:15 IST, after the NSE close
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Tests
+        run: node test/strategy.test.js
+      - name: Download prices
+        if: github.event_name != 'push'
+        run: node scripts/fetch_data.js
+      - name: Save prices
+        if: github.event_name != 'push'
+        run: |
+          git config user.name "paper-scanner-bot"
+          git config user.email "paper-scanner-bot@users.noreply.github.com"
+          git add web/data/prices.json
+          git diff --cached --quiet || (git commit -m "Daily prices" && git push)
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deploy
+        uses: actions/deploy-pages@v4
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
